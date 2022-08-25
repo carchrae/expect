@@ -1,0 +1,29 @@
+<style>
+    table td, table td * {
+        vertical-align: top;
+    }
+
+    table {
+        width: 100%;
+    }
+</style>
+<table>
+    <tbody>
+    <tr>
+        <td>Bowen</td>
+        <td>HSB</td>
+        <td>Status</td>
+    </tr>
+
+    {{#each rows}}
+        <tr>
+            <td>{{ b.depart }}</td>
+        </tr>
+        <tr>
+            <td></td>
+            <td>{{ depart }}</td>
+            <td>{{ delay }}  {{ capacity }}</td>
+        </tr>
+    {{/each}}
+    </tbody>
+</table>

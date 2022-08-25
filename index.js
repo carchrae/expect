@@ -1,57 +1,72 @@
-exports.handler = async function http(req) {
+const moment = require('moment');
 
-  let html = `
-<!doctype html>
-<html lang=en>
-  <head>
-    <meta charset=utf-8>
-    <title>Hi!</title>
-    <link rel="stylesheet" href="https://static.begin.app/starter/default.css">
-    <link href="data:image/x-icon;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=" rel="icon" type="image/x-icon">
-  </head>
-  <body>
+const Handlebars = require("handlebars");
+const templateSrc = require('./views/home');
+const template = Handlebars.compile(templateSrc)
 
-    <h1 class="center-text">
-      <!-- ↓ Change "Hello world!" to something else and head on back to Begin! -->
-      Hello worl!
-    </h1>
+// const exphbs = require('express-handlebars');
 
-    <p class="center-text">
-      Your <a href="https://begin.com" class="link" target="_blank">Begin</a> app is ready to go!
-    </p>
+const condition = require('./conditions');
+const schedule = require('./schedule');
+const delay = require('./delay');
+const timeFormat = 'hh:mm AA';
 
-  </body>
-</html>`
+// app.engine('handlebars', remoteHandlebars({ layout: 'http://localhost/template.handlebars', cacheControl: 'max-age=600, stale-while-revalidate=86400' }));
+//
+// app.engine('hbs', exphbs({
+//   defaultLayout: 'main',
+//   extname: '.hbs',
+// }));
 
-  return {
-    headers: {
-      'content-type': 'text/html; charset=utf8',
-      'cache-control': 'no-cache, no-store, must-revalidate, max-age=0, s-maxage=0'
-    },
-    statusCode: 200,
-    body: html
-  }
-}
+// app.set('view engine', 'hbs');
 
-// Other example responses
+let handler = async (req) => {
+    console.log('processing request');
+    const [conditions, scheduleToHSB, scheduleToBOW] = await Promise.all([
+        condition(),
+        schedule({from: 'BOW', to: 'HSB'}),
+        schedule({from: 'HSB', to: 'BOW'})
+    ]);
+    const firstSailingHSB = scheduleToHSB[0].depart;
+    const firstSailingBOW = scheduleToBOW[0].depart;
+    const isHSBFirst = (moment(firstSailingHSB, timeFormat)
+        .isBefore(moment(firstSailingBOW, timeFormat)));
 
-/* Forward requester to a new path
-exports.handler = async function http (req) {
-  return {
-    statusCode: 302,
-    headers: {'location': '/about'}
-  }
-}
-*/
+    const rows = delay(scheduleToBOW, conditions);
 
-/* Respond with successful resource creation, CORS enabled
-let arc = require('@architect/functions')
-exports.handler = arc.http.async (http)
-async function http (req) {
-  return {
-    statusCode: 201,
-    json: { ok: true },
-    cors: true,
-  }
-}
-*/
+
+    if (isHSBFirst) {
+        rows.forEach((c, i) => {
+            if (scheduleToHSB[i]) {
+                rows[i].b = scheduleToHSB[i];
+            }
+        });
+    } else {
+        // offset to keep order
+        rows.forEach((c, i) => {
+            if (scheduleToHSB[i]) {
+                rows[i + 1] = rows[i + 1] || {};
+                rows[i + 1].b = scheduleToHSB[i];
+            }
+        });
+    }
+
+    let context = {conditions, scheduleToBOW, scheduleToHSB, rows};
+
+    {
+        context.json = JSON.stringify(context, null, 2);
+        return {
+            headers: {
+                'content-type': 'text/html; charset=utf8',
+                'cache-control': 'no-cache, no-store, must-revalidate, max-age=0, s-maxage=0'
+            },
+            statusCode: 200,
+            body: template(context)
+        }
+    }
+};
+
+
+exports.handler = handler;
+
+
